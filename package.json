@@ -10,9 +10,12 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "seed:campaign": "tsx --env-file=.env.local scripts/seed-campaign.ts",
+    "snapshot:run": "tsx --env-file=.env.local scripts/run-snapshot.ts",
     "qstash:setup": "tsx --env-file=.env.local scripts/setup-qstash-schedules.ts",
+    "cron:test": "tsx --env-file=.env.local scripts/test-cron.ts",
     "qstash:list": "tsx --env-file=.env.local -e \"import('@upstash/qstash').then(({Client})=>new Client({token:process.env.QSTASH_TOKEN!}).schedules.list().then(l=>console.table(l.map(s=>({id:s.scheduleId,cron:s.cron,dest:s.destination})))))\""
   },
   "dependencies": {

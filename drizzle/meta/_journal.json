@@ -8,6 +8,13 @@
       "when": 1776753508803,
       "tag": "0000_last_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776756228414,
+      "tag": "0001_violet_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

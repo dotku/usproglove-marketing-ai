@@ -3,6 +3,7 @@ import { trackedGenerateObject, trackEmailSent } from "@/lib/ai/track";
 import { findContacts, verifyEmail } from "@/lib/prospects/enrichment";
 import { googlePlacesSource } from "@/lib/prospects/sources/google-places";
 import { sendEmail } from "@/lib/email/brevo";
+import { composeEmail, type SenderIdentity } from "@/lib/email/compose";
 import type { Vertical } from "@/../content/catalog/products";
 import { products, heroSkuByVertical } from "@/../content/catalog/products";
 import {
@@ -403,12 +404,32 @@ export async function runOutboundStep(ctx: OutboundContext) {
         },
       });
 
+      const sender: SenderIdentity = {
+        name: ctx.senderName,
+        email: ctx.senderEmail,
+        replyTo: ctx.replyToEmail,
+        title: process.env.SENDER_TITLE || undefined,
+        phone: process.env.SENDER_PHONE || undefined,
+        companyName: process.env.SENDER_COMPANY_NAME || undefined,
+        companyWebsite: process.env.SENDER_COMPANY_WEBSITE || undefined,
+      };
+      const composed = composeEmail({
+        draft: draft.object,
+        sender,
+        recipient: { email: contact.email, firstName: contact.firstName, lastName: contact.lastName },
+      });
+
       if (mode === "preview") {
         await mergeProspectMetadata(prospectId, {
           draft: {
-            subject: draft.object.subject,
-            textBody: draft.object.textBody,
-            htmlBody: draft.object.htmlBody,
+            subject: composed.subject,
+            textBody: composed.textContent,
+            htmlBody: composed.htmlContent,
+            from: composed.from,
+            to: composed.to,
+            replyTo: composed.replyTo,
+            signatureText: composed.signatureText,
+            signatureHtml: composed.signatureHtml,
           },
         });
         results.push({ prospectId, companyId, email: contact.email, status: "preview" });
@@ -425,18 +446,18 @@ export async function runOutboundStep(ctx: OutboundContext) {
           },
           from: { email: ctx.senderEmail, name: ctx.senderName },
           replyTo: { email: ctx.replyToEmail },
-          subject: draft.object.subject,
-          textContent: draft.object.textBody,
-          htmlContent: draft.object.htmlBody,
+          subject: composed.subject,
+          textContent: composed.textContent,
+          htmlContent: composed.htmlContent,
           tags: [`vertical:${ctx.vertical}`, `campaign:${ctx.campaignId}`],
         });
 
         await insertOutboundMessage({
           prospectId,
           campaignId: ctx.campaignId,
-          subject: draft.object.subject,
-          bodyText: draft.object.textBody,
-          bodyHtml: draft.object.htmlBody,
+          subject: composed.subject,
+          bodyText: composed.textContent,
+          bodyHtml: composed.htmlContent,
           messageId: sent.messageId,
           providerMessageId: sent.providerMessageId,
         });

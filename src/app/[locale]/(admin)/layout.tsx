@@ -50,6 +50,8 @@ export default async function AdminLayout({
     ["/prospects", t("prospects")],
     ["/replies", t("replies")],
     ["/content", t("content")],
+    ["/cron", t("cron")],
+    ["/faq", t("faq")],
   ];
 
   return (

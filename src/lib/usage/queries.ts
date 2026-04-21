@@ -106,3 +106,77 @@ export async function getRecentAiCalls(limit = 10) {
     .orderBy(desc(schema.aiUsage.createdAt))
     .limit(limit);
 }
+
+export interface CronRunRow {
+  id: string;
+  job: string;
+  status: (typeof schema.cronRunStatusEnum.enumValues)[number];
+  triggeredBy: (typeof schema.cronRunTriggerEnum.enumValues)[number];
+  startedAt: Date;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export async function getLatestCronRunPerJob(): Promise<Record<string, CronRunRow>> {
+  const rows = await db.execute<{
+    id: string;
+    job: string;
+    status: CronRunRow["status"];
+    triggered_by: CronRunRow["triggeredBy"];
+    started_at: Date;
+    finished_at: Date | null;
+    duration_ms: number | null;
+    result: Record<string, unknown> | null;
+    error: string | null;
+  }>(sql`
+    SELECT DISTINCT ON (job) id, job, status, triggered_by, started_at, finished_at, duration_ms, result, error
+    FROM cron_runs
+    ORDER BY job, started_at DESC
+  `);
+
+  const result: Record<string, CronRunRow> = {};
+  for (const row of rows.rows ?? []) {
+    result[row.job] = {
+      id: row.id,
+      job: row.job,
+      status: row.status,
+      triggeredBy: row.triggered_by,
+      startedAt: new Date(row.started_at),
+      finishedAt: row.finished_at ? new Date(row.finished_at) : null,
+      durationMs: row.duration_ms,
+      result: row.result,
+      error: row.error,
+    };
+  }
+  return result;
+}
+
+export async function getCronRunHistory(opts?: { job?: string; limit?: number }): Promise<CronRunRow[]> {
+  const limit = opts?.limit ?? 100;
+  const q = db
+    .select()
+    .from(schema.cronRuns)
+    .orderBy(desc(schema.cronRuns.startedAt))
+    .limit(limit);
+  const rows = opts?.job
+    ? await db
+        .select()
+        .from(schema.cronRuns)
+        .where(eq(schema.cronRuns.job, opts.job))
+        .orderBy(desc(schema.cronRuns.startedAt))
+        .limit(limit)
+    : await q;
+  return rows.map((r) => ({
+    id: r.id,
+    job: r.job,
+    status: r.status,
+    triggeredBy: r.triggeredBy,
+    startedAt: r.startedAt,
+    finishedAt: r.finishedAt,
+    durationMs: r.durationMs,
+    result: r.result,
+    error: r.error,
+  }));
+}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { trackCronRun, inferTrigger } from "@/lib/cron/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // TODO: publish any scheduled content_pieces whose publishedAt <= now
-  return NextResponse.json({ ok: true, published: 0 });
+  const summary = await trackCronRun("content-publish", inferTrigger(request), async () => {
+    // TODO: publish any scheduled content_pieces whose publishedAt <= now
+    return { published: 0 };
+  });
+  return NextResponse.json({ ok: true, ...summary });
 }

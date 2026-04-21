@@ -9,7 +9,13 @@
     "prospects": "Prospects",
     "replies": "Replies",
     "content": "Content",
+    "cron": "Cron",
+    "faq": "FAQ",
     "settings": "Settings"
+  },
+  "faq": {
+    "title": "Frequently asked questions",
+    "subtitle": "How the marketing agent works, what to expect, how to troubleshoot."
   },
   "auth": {
     "signIn": "Sign in",
@@ -40,6 +46,10 @@
       "active": "Active",
       "paused": "Paused",
       "archived": "Archived"
+    },
+    "icp": {
+      "configured": "Custom",
+      "default": "Default"
     },
     "run": {
       "discover": "Discover only",
@@ -97,12 +107,47 @@
     "aiCallsToday": "AI calls today",
     "dbSize": "Database size",
     "quotaTitle": "Service quotas",
-    "emailQuota": "Email (daily left)",
-    "emailCredits": "Email credits",
+    "emailQuota": "Email sends left",
+    "emailQuotaSub": "resets daily",
+    "emailCredits": "Email credits left",
+    "emailCreditsSub": "resets monthly",
     "discoveryQuota": "Discovery searches left",
+    "discoveryQuotaSub": "resets monthly",
     "verificationQuota": "Email verifications left",
+    "verificationQuotaSub": "resets monthly",
     "enrichmentCredits": "Enrichment credits left",
-    "lastSnapshotted": "Last snapshot"
+    "enrichmentCreditsSub": "resets monthly",
+    "lastSnapshotted": "Last snapshot",
+    "cronTitle": "Scheduled jobs",
+    "cronViewAll": "View history",
+    "cronNever": "Never ran",
+    "cronStatus": {
+      "running": "Running",
+      "success": "OK",
+      "error": "Failed"
+    },
+    "cronJobs": {
+      "outbound": {
+        "name": "Outbound sends",
+        "description": "Discover prospects, verify emails, score fit with AI, draft personalized messages, send within daily cap",
+        "schedule": "every 4 hours"
+      },
+      "reply-poll": {
+        "name": "Reply polling",
+        "description": "Pull replies from the IMAP mailbox and match them to prospects to advance the outbound workflow",
+        "schedule": "every 15 min"
+      },
+      "content-publish": {
+        "name": "Content publishing",
+        "description": "Release scheduled SEO and content pieces whose publish time has arrived",
+        "schedule": "daily 09:00"
+      },
+      "usage-snapshot": {
+        "name": "Usage snapshot",
+        "description": "Record database size, row counts, and remaining API quotas across providers",
+        "schedule": "daily 00:00"
+      }
+    }
   },
   "prospects": {
     "title": "Prospects",
@@ -144,8 +189,31 @@
       "aiReasoning": "Reasoning",
       "suggestedSku": "Suggested SKU",
       "draftTitle": "Draft (not yet sent)",
+      "from": "From",
+      "to": "To",
+      "replyTo": "Reply-To",
       "subject": "Subject",
       "body": "Body",
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "sendNow": "Send now",
+      "sending": "Sending…",
+      "sendConfirm": "Send this email now? This is a real send and counts against today's daily cap.",
+      "sendSuccess": "Email sent",
+      "sendError": "Send failed",
+      "editSaved": "Draft saved",
+      "editError": "Save failed",
+      "refineTitle": "AI assist",
+      "refineOneClick": "✨ Optimize",
+      "refineApply": "✨ Apply",
+      "refining": "Thinking…",
+      "refinePromptPlaceholder": "e.g. make it shorter, add a specific CTA, match a more casual tone…",
+      "refinePromptEmpty": "Enter an instruction first",
+      "refineHint": "Changes the draft in place. Hit Save when you're happy.",
+      "refineSuccess": "Draft refined",
+      "refineError": "Refine failed",
       "messagesTitle": "Messages",
       "messagesEmpty": "No messages sent yet.",
       "sentAt": "Sent",
@@ -157,6 +225,34 @@
   "replies": {
     "title": "Reply inbox",
     "empty": "No replies yet"
+  },
+  "cron": {
+    "title": "Scheduled jobs",
+    "description": "Status and history of scheduled background work — triggered by Upstash QStash.",
+    "historyTitle": "Run history",
+    "empty": "No runs yet. Jobs will appear once the first schedule fires or you trigger a manual run.",
+    "never": "Never ran",
+    "retry": "Run now",
+    "retryPending": "Running…",
+    "filterAll": "All",
+    "status": {
+      "running": "Running",
+      "success": "Success",
+      "error": "Failed"
+    },
+    "trigger": {
+      "scheduled": "Scheduled",
+      "manual": "Manual",
+      "retry": "Retry"
+    },
+    "col": {
+      "startedAt": "Started",
+      "job": "Job",
+      "trigger": "Trigger",
+      "status": "Status",
+      "duration": "Duration",
+      "summary": "Summary / error"
+    }
   },
   "content": {
     "title": "Content & SEO engine",

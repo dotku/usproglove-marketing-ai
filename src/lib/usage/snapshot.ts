@@ -62,21 +62,26 @@ export async function collectBrevoSnapshot(): Promise<Snapshot[]> {
   const res = await fetch("https://api.brevo.com/v3/account", {
     headers: { "api-key": apiKey, Accept: "application/json" },
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.warn(`Brevo snapshot: account endpoint returned ${res.status}`);
+    return [];
+  }
   const data = (await res.json()) as {
     plan?: Array<{ type?: string; credits?: number; creditsType?: string }>;
   };
 
   const snapshots: Snapshot[] = [];
   for (const p of data.plan ?? []) {
-    if (p.type && typeof p.credits === "number") {
-      snapshots.push({
-        kind: "brevo_credits_remaining",
-        scope: p.type,
-        value: p.credits,
-        unit: p.creditsType ?? "credits",
-      });
-    }
+    if (!p.type || typeof p.credits !== "number") continue;
+
+    // sendLimit = daily cap (free tier email-send quota), everything else is monthly credits.
+    const isDailyCap = p.creditsType === "sendLimit";
+    snapshots.push({
+      kind: isDailyCap ? "brevo_daily_remaining" : "brevo_credits_remaining",
+      scope: p.type,
+      value: p.credits,
+      unit: p.creditsType ?? "credits",
+    });
   }
   return snapshots;
 }
@@ -121,22 +126,40 @@ export async function collectHunterSnapshot(): Promise<Snapshot[]> {
 export async function collectSnovSnapshot(): Promise<Snapshot[]> {
   const clientId = process.env.SNOV_CLIENT_ID;
   const clientSecret = process.env.SNOV_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return [];
+  if (!clientId || !clientSecret) {
+    console.warn("Snov snapshot: credentials not set");
+    return [];
+  }
 
   const tokenRes = await fetch("https://api.snov.io/v1/oauth/access_token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }),
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
   });
-  if (!tokenRes.ok) return [];
-  const { access_token } = (await tokenRes.json()) as { access_token: string };
+  if (!tokenRes.ok) {
+    console.warn(`Snov snapshot: oauth failed ${tokenRes.status} — ${await tokenRes.text()}`);
+    return [];
+  }
+  const tokenData = (await tokenRes.json()) as { access_token?: string };
+  if (!tokenData.access_token) {
+    console.warn(`Snov snapshot: oauth returned no token — ${JSON.stringify(tokenData)}`);
+    return [];
+  }
 
   const balanceRes = await fetch("https://api.snov.io/v1/get-balance", {
-    headers: { Authorization: `Bearer ${access_token}` },
+    headers: { Authorization: `Bearer ${tokenData.access_token}` },
   });
-  if (!balanceRes.ok) return [];
-  const data = (await balanceRes.json()) as { balance?: string | number };
-  const balance = typeof data.balance === "string" ? Number(data.balance) : (data.balance ?? 0);
+  if (!balanceRes.ok) {
+    console.warn(`Snov snapshot: balance failed ${balanceRes.status} — ${await balanceRes.text()}`);
+    return [];
+  }
+  const data = (await balanceRes.json()) as { balance?: string | number; data?: { balance?: string | number } };
+  const rawBalance = data.balance ?? data.data?.balance ?? 0;
+  const balance = typeof rawBalance === "string" ? Number(rawBalance) : rawBalance;
 
   return [{ kind: "snov_credits_remaining", value: balance, unit: "credits" }];
 }
@@ -167,6 +190,7 @@ export async function persistSnapshots(snapshots: Snapshot[]) {
 
 export async function runAllSnapshots() {
   const all: Snapshot[] = [];
+  const sectionNames = ["db", "brevo", "hunter", "snov", "ai-cost"] as const;
   const sections = await Promise.allSettled([
     collectDbSnapshots(),
     collectBrevoSnapshot(),
@@ -174,9 +198,14 @@ export async function runAllSnapshots() {
     collectSnovSnapshot(),
     collectAiDailyCost(),
   ]);
-  for (const section of sections) {
-    if (section.status === "fulfilled") all.push(...section.value);
-  }
+  const errors: Array<{ section: string; error: string }> = [];
+  sections.forEach((section, i) => {
+    if (section.status === "fulfilled") {
+      all.push(...section.value);
+    } else {
+      errors.push({ section: sectionNames[i], error: String(section.reason) });
+    }
+  });
   await persistSnapshots(all);
-  return { collected: all.length };
+  return { collected: all.length, errors };
 }

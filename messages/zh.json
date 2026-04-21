@@ -9,7 +9,13 @@
     "prospects": "潜在客户",
     "replies": "回复",
     "content": "内容",
+    "cron": "定时任务",
+    "faq": "常见问题",
     "settings": "设置"
+  },
+  "faq": {
+    "title": "常见问题",
+    "subtitle": "系统的工作原理、使用预期与常见排查方法"
   },
   "auth": {
     "signIn": "登录",
@@ -40,6 +46,10 @@
       "active": "运行中",
       "paused": "暂停",
       "archived": "归档"
+    },
+    "icp": {
+      "configured": "自定义",
+      "default": "默认"
     },
     "run": {
       "discover": "只发现",
@@ -97,12 +107,47 @@
     "aiCallsToday": "今日 AI 调用",
     "dbSize": "数据库大小",
     "quotaTitle": "服务配额",
-    "emailQuota": "邮件（今日剩余）",
-    "emailCredits": "邮件额度",
+    "emailQuota": "邮件发送剩余",
+    "emailQuotaSub": "每日重置",
+    "emailCredits": "邮件额度剩余",
+    "emailCreditsSub": "每月重置",
     "discoveryQuota": "客户搜索剩余",
+    "discoveryQuotaSub": "每月重置",
     "verificationQuota": "邮箱验证剩余",
-    "enrichmentCredits": "enrichment 额度剩余",
-    "lastSnapshotted": "最近快照"
+    "verificationQuotaSub": "每月重置",
+    "enrichmentCredits": "Enrichment 额度剩余",
+    "enrichmentCreditsSub": "每月重置",
+    "lastSnapshotted": "最近快照",
+    "cronTitle": "定时任务",
+    "cronViewAll": "查看历史",
+    "cronNever": "尚未运行",
+    "cronStatus": {
+      "running": "运行中",
+      "success": "成功",
+      "error": "失败"
+    },
+    "cronJobs": {
+      "outbound": {
+        "name": "外联发送",
+        "description": "发现潜客、验证邮箱、AI 打分、生成个性化邮件并在每日上限内发送",
+        "schedule": "每 4 小时"
+      },
+      "reply-poll": {
+        "name": "回复拉取",
+        "description": "从 IMAP 邮箱拉取回复并匹配到潜客，继续推进外联流程",
+        "schedule": "每 15 分钟"
+      },
+      "content-publish": {
+        "name": "内容发布",
+        "description": "发布到达预定时间的 SEO / 内容条目",
+        "schedule": "每日 09:00"
+      },
+      "usage-snapshot": {
+        "name": "用量快照",
+        "description": "记录数据库大小、各表行数、各服务商剩余配额",
+        "schedule": "每日 00:00"
+      }
+    }
   },
   "prospects": {
     "title": "潜在客户",
@@ -144,8 +189,31 @@
       "aiReasoning": "评分理由",
       "suggestedSku": "推荐 SKU",
       "draftTitle": "草稿（尚未发送）",
+      "from": "发件人",
+      "to": "收件人",
+      "replyTo": "回复至",
       "subject": "主题",
       "body": "正文",
+      "edit": "编辑",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "sendNow": "立即发送",
+      "sending": "发送中…",
+      "sendConfirm": "确认立即发送？这是一次真实发送，会计入今日发送上限",
+      "sendSuccess": "邮件已发送",
+      "sendError": "发送失败",
+      "editSaved": "草稿已保存",
+      "editError": "保存失败",
+      "refineTitle": "AI 辅助",
+      "refineOneClick": "✨ 一键优化",
+      "refineApply": "✨ 应用",
+      "refining": "生成中…",
+      "refinePromptPlaceholder": "例如：更简短一点、加一个明确的行动号召、语气更随意一些…",
+      "refinePromptEmpty": "请先输入优化指令",
+      "refineHint": "优化结果会直接替换当前草稿，满意后点保存",
+      "refineSuccess": "草稿已优化",
+      "refineError": "优化失败",
       "messagesTitle": "邮件记录",
       "messagesEmpty": "尚未发送任何邮件",
       "sentAt": "发送时间",
@@ -157,6 +225,34 @@
   "replies": {
     "title": "回复收件箱",
     "empty": "暂无回复"
+  },
+  "cron": {
+    "title": "定时任务",
+    "description": "由 Upstash QStash 触发的后台任务运行状态与历史记录",
+    "historyTitle": "运行记录",
+    "empty": "暂无运行记录，定时任务首次触发或手动运行后会在此显示",
+    "never": "尚未运行",
+    "retry": "立即运行",
+    "retryPending": "运行中…",
+    "filterAll": "全部",
+    "status": {
+      "running": "运行中",
+      "success": "成功",
+      "error": "失败"
+    },
+    "trigger": {
+      "scheduled": "定时",
+      "manual": "手动",
+      "retry": "重试"
+    },
+    "col": {
+      "startedAt": "开始时间",
+      "job": "任务",
+      "trigger": "触发方式",
+      "status": "状态",
+      "duration": "耗时",
+      "summary": "结果 / 错误"
+    }
   },
   "content": {
     "title": "内容与 SEO 引擎",

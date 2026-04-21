@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
 import { setRequestLocale, getTranslations, getFormatter } from "next-intl/server";
 import { db, schema } from "@/lib/db";
+import { DraftEditor } from "./_components/DraftEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,16 @@ export default async function ProspectDetailPage({
   const meta = (prospect.metadata ?? {}) as {
     verification?: { deliverable: boolean; score: number; threshold: number };
     score?: { fit: number; reasoning: string; suggestedSkuId: string };
-    draft?: { subject: string; textBody: string; htmlBody: string };
+    draft?: {
+      subject: string;
+      textBody: string;
+      htmlBody: string;
+      from?: string;
+      to?: string;
+      replyTo?: string;
+      signatureText?: string;
+      signatureHtml?: string;
+    };
   };
 
   const contactName = [prospect.firstName, prospect.lastName].filter(Boolean).join(" ");
@@ -117,16 +127,14 @@ export default async function ProspectDetailPage({
       {meta.draft && messages.length === 0 && (
         <section>
           <h2 className="text-lg font-semibold mb-3">{t("draftTitle")}</h2>
-          <div className="rounded-lg border border-dashed border-neutral-300 dark:border-neutral-700 p-4 space-y-3">
-            <div>
-              <div className="text-xs font-medium text-neutral-500">{t("subject")}</div>
-              <div className="text-sm">{meta.draft.subject}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-neutral-500">{t("body")}</div>
-              <pre className="text-sm whitespace-pre-wrap font-sans">{meta.draft.textBody}</pre>
-            </div>
-          </div>
+          <DraftEditor
+            prospectId={prospect.id}
+            initialSubject={meta.draft.subject}
+            initialBody={meta.draft.textBody}
+            from={meta.draft.from}
+            to={meta.draft.to}
+            replyTo={meta.draft.replyTo}
+          />
         </section>
       )}
 
@@ -209,6 +217,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     </div>
   );
 }
+
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

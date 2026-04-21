@@ -223,3 +223,25 @@ export const usageSnapshots = pgTable(
     createdIdx: index("usage_snapshots_created_idx").on(t.createdAt),
   }),
 );
+
+export const cronRunStatusEnum = pgEnum("cron_run_status", ["running", "success", "error"]);
+export const cronRunTriggerEnum = pgEnum("cron_run_trigger", ["scheduled", "manual", "retry"]);
+
+export const cronRuns = pgTable(
+  "cron_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    job: varchar("job", { length: 64 }).notNull(),
+    status: cronRunStatusEnum("status").notNull().default("running"),
+    triggeredBy: cronRunTriggerEnum("triggered_by").notNull().default("scheduled"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    durationMs: integer("duration_ms"),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    error: text("error"),
+  },
+  (t) => ({
+    jobStartedIdx: index("cron_runs_job_started_idx").on(t.job, t.startedAt),
+    startedIdx: index("cron_runs_started_idx").on(t.startedAt),
+  }),
+);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { pollInbox } from "@/lib/email/reply-poller";
+import { trackCronRun, inferTrigger } from "@/lib/cron/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +10,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const since = new Date(Date.now() - 30 * 60 * 1000);
   try {
-    const messages = await pollInbox(since);
-    return NextResponse.json({ ok: true, count: messages.length });
+    const summary = await trackCronRun("reply-poll", inferTrigger(request), async () => {
+      const since = new Date(Date.now() - 30 * 60 * 1000);
+      const messages = await pollInbox(since);
+      return { count: messages.length, since: since.toISOString() };
+    });
+    return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 200 });
   }

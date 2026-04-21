@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runAllSnapshots } from "@/lib/usage/snapshot";
+import { trackCronRun, inferTrigger } from "@/lib/cron/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await runAllSnapshots();
-    return NextResponse.json({ ok: true, ...result });
+    const summary = await trackCronRun("usage-snapshot", inferTrigger(request), async () => {
+      const result = await runAllSnapshots();
+      return { collected: result.collected };
+    });
+    return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }

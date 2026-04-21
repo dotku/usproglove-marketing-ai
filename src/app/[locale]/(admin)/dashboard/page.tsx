@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { setRequestLocale, getTranslations, getFormatter } from "next-intl/server";
 import {
   getTodayTokenUsage,
@@ -5,8 +6,10 @@ import {
   getTodayReplyCount,
   getActiveCampaignCount,
   getLatestSnapshotsByKind,
+  getLatestCronRunPerJob,
   type LatestSnapshot,
 } from "@/lib/usage/queries";
+import { CRON_JOBS } from "@/lib/cron/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -36,17 +39,23 @@ export default async function DashboardPage({
   const t = await getTranslations("dashboard");
   const format = await getFormatter();
 
-  const [tokens, sentToday, repliesToday, activeCampaigns, snapshots] = await Promise.all([
+  const [tokens, sentToday, repliesToday, activeCampaigns, snapshots, latestCronRuns] = await Promise.all([
     getTodayTokenUsage().catch(() => null),
     getTodaySentCount().catch(() => 0),
     getTodayReplyCount().catch(() => 0),
     getActiveCampaignCount().catch(() => 0),
     getLatestSnapshotsByKind().catch(() => ({} as Record<string, LatestSnapshot>)),
+    getLatestCronRunPerJob().catch(() => ({}) as Record<string, import("@/lib/usage/queries").CronRunRow>),
   ]);
 
   const dbSize = snapshots["db_total_size_bytes"]?.value ?? 0;
-  const brevoDaily = snapshots["brevo_credits_remaining:email_campaigns"] ?? snapshots["brevo_credits_remaining:sendLimit"];
-  const brevoCredits = snapshots["brevo_credits_remaining:sms"] ?? snapshots["brevo_credits_remaining:transactional"];
+  const brevoDaily =
+    snapshots["brevo_daily_remaining:free"] ??
+    snapshots["brevo_daily_remaining:sms"] ??
+    Object.values(snapshots).find((s) => s.kind === "brevo_daily_remaining");
+  const brevoCredits = Object.values(snapshots).find(
+    (s) => s.kind === "brevo_credits_remaining" && s.value > 0,
+  );
   const hunterSearches = snapshots["hunter_searches_remaining"];
   const hunterVerifications = snapshots["hunter_verifications_remaining"];
   const snovCredits = snapshots["snov_credits_remaining"];
@@ -70,11 +79,31 @@ export default async function DashboardPage({
   ];
 
   const quotaStats = [
-    { label: t("emailQuota"), value: brevoDaily ? format.number(brevoDaily.value) : "—" },
-    { label: t("emailCredits"), value: brevoCredits ? format.number(brevoCredits.value) : "—" },
-    { label: t("discoveryQuota"), value: hunterSearches ? format.number(hunterSearches.value) : "—" },
-    { label: t("verificationQuota"), value: hunterVerifications ? format.number(hunterVerifications.value) : "—" },
-    { label: t("enrichmentCredits"), value: snovCredits ? format.number(snovCredits.value) : "—" },
+    {
+      label: t("emailQuota"),
+      value: brevoDaily ? format.number(brevoDaily.value) : "—",
+      sub: t("emailQuotaSub"),
+    },
+    {
+      label: t("emailCredits"),
+      value: brevoCredits ? format.number(brevoCredits.value) : "—",
+      sub: t("emailCreditsSub"),
+    },
+    {
+      label: t("discoveryQuota"),
+      value: hunterSearches ? format.number(hunterSearches.value) : "—",
+      sub: t("discoveryQuotaSub"),
+    },
+    {
+      label: t("verificationQuota"),
+      value: hunterVerifications ? format.number(hunterVerifications.value) : "—",
+      sub: t("verificationQuotaSub"),
+    },
+    {
+      label: t("enrichmentCredits"),
+      value: snovCredits ? format.number(snovCredits.value) : "—",
+      sub: t("enrichmentCreditsSub"),
+    },
   ];
 
   return (
@@ -105,8 +134,92 @@ export default async function DashboardPage({
           ))}
         </div>
       </section>
+
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-lg font-semibold">{t("cronTitle")}</h2>
+          <Link href="/cron" className="text-xs text-neutral-500 hover:underline">
+            {t("cronViewAll")} →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {CRON_JOBS.map((job) => {
+            const run = latestCronRuns[job];
+            return <CronCard key={job} job={job} run={run} t={t} format={format} />;
+          })}
+        </div>
+      </section>
     </div>
   );
+}
+
+function CronCard({
+  job,
+  run,
+  t,
+  format,
+}: {
+  job: string;
+  run: import("@/lib/usage/queries").CronRunRow | undefined;
+  t: Awaited<ReturnType<typeof getTranslations>>;
+  format: Awaited<ReturnType<typeof getFormatter>>;
+}) {
+  const statusClass = run
+    ? run.status === "success"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : run.status === "error"
+      ? "text-red-600 dark:text-red-400"
+      : "text-amber-600 dark:text-amber-400"
+    : "text-neutral-500";
+
+  const name = safeTranslate(t, `cronJobs.${job}.name`, job);
+  const description = safeTranslate(t, `cronJobs.${job}.description`);
+  const schedule = safeTranslate(t, `cronJobs.${job}.schedule`);
+
+  return (
+    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-5 flex flex-col h-full">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm font-medium">{name}</div>
+        {run && (
+          <div className={`text-xs font-medium ${statusClass}`}>
+            {t(`cronStatus.${run.status}`)}
+          </div>
+        )}
+      </div>
+      {description && (
+        <div className="mt-1.5 text-xs text-neutral-500 leading-snug">{description}</div>
+      )}
+      {schedule && (
+        <div className="mt-2 text-xs uppercase tracking-wide text-neutral-400">{schedule}</div>
+      )}
+      <div className="mt-auto pt-3">
+        {run ? (
+          <>
+            <div className="text-sm">{format.relativeTime(run.startedAt, new Date())}</div>
+            <div className="mt-1 text-xs text-neutral-500 tabular-nums">
+              {run.durationMs != null ? `${run.durationMs}ms` : "—"}
+              {run.error ? ` · ${run.error.slice(0, 48)}` : ""}
+            </div>
+          </>
+        ) : (
+          <div className="text-sm text-neutral-500">{t("cronNever")}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function safeTranslate(
+  t: Awaited<ReturnType<typeof getTranslations>>,
+  key: string,
+  fallback = "",
+): string {
+  try {
+    const value = t(key as Parameters<typeof t>[0]);
+    return value === key ? fallback : value;
+  } catch {
+    return fallback;
+  }
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
