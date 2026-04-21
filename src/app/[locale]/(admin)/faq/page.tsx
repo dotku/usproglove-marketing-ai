@@ -171,7 +171,7 @@ const faqZh: FaqSection[] = [
     title: "故障与排查",
     items: [
       {
-        q: "AI 打分永远 &lt; 60,怎么办？",
+        q: "AI 打分永远低于 60,怎么办？",
         a: "多半是 ICP 描述跟实际目标不匹配,或者 prompt 里的 rubric 太严。去 campaign 编辑页看 ICP 文本是不是太窄,或者改 MIN_FIT_SCORE 环境变量临时放宽到 50 看数据。",
       },
       {
