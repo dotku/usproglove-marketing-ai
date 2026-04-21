@@ -1,0 +1,60 @@
+{
+  "brand": {
+    "name": "USProGlove Marketing Agent",
+    "tagline": "B2B outreach, content, and lifecycle — on autopilot"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "prospects": "Prospects",
+    "replies": "Replies",
+    "content": "Content",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Campaign overview",
+    "todaySent": "Sent today",
+    "todayReplies": "Replies today",
+    "activeCampaigns": "Active campaigns",
+    "replyRate": "Reply rate (7d)"
+  },
+  "prospects": {
+    "title": "Prospect review queue",
+    "empty": "No prospects pending review",
+    "columns": {
+      "company": "Company",
+      "vertical": "Vertical",
+      "contact": "Contact",
+      "score": "Score",
+      "status": "Status"
+    }
+  },
+  "replies": {
+    "title": "Reply inbox",
+    "empty": "No replies yet"
+  },
+  "content": {
+    "title": "Content & SEO engine",
+    "phase": "Phase 2",
+    "description": "Keyword clusters, long-form drafts, on-page SEO, scheduled publishing — per vertical.",
+    "plannedModules": "Planned modules",
+    "modules": {
+      "clusters": "Keyword clusters per vertical",
+      "drafts": "AI-generated long-form drafts",
+      "seo": "On-page SEO + JSON-LD",
+      "schedule": "Scheduled publish queue",
+      "internalLinks": "Cross-link to outbound landing pages"
+    }
+  },
+  "verticals": {
+    "tattoo": "Tattoo / piercing",
+    "beauty": "Beauty / nail / salon",
+    "restaurant": "Restaurant / food service",
+    "medical": "Medical / clinic",
+    "industrial": "Industrial / manufacturing",
+    "automotive": "Automotive",
+    "agriculture": "Agriculture / farm",
+    "janitorial": "Cleaning / janitorial",
+    "cannabis": "Cannabis",
+    "veterinary": "Veterinary"
+  }
+}

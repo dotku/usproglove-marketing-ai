@@ -1,0 +1,60 @@
+{
+  "brand": {
+    "name": "USProGlove 营销智能体",
+    "tagline": "B2B 外联、内容与生命周期自动化"
+  },
+  "nav": {
+    "dashboard": "仪表盘",
+    "prospects": "潜在客户",
+    "replies": "回复",
+    "content": "内容",
+    "settings": "设置"
+  },
+  "dashboard": {
+    "title": "活动总览",
+    "todaySent": "今日已发送",
+    "todayReplies": "今日回复",
+    "activeCampaigns": "进行中活动",
+    "replyRate": "回复率（7 天）"
+  },
+  "prospects": {
+    "title": "潜在客户审核队列",
+    "empty": "暂无待审核潜在客户",
+    "columns": {
+      "company": "公司",
+      "vertical": "行业",
+      "contact": "联系人",
+      "score": "评分",
+      "status": "状态"
+    }
+  },
+  "replies": {
+    "title": "回复收件箱",
+    "empty": "暂无回复"
+  },
+  "content": {
+    "title": "内容与 SEO 引擎",
+    "phase": "第二阶段",
+    "description": "按行业垂直领域生成关键词集群、长文稿、页面 SEO 与定时发布",
+    "plannedModules": "计划模块",
+    "modules": {
+      "clusters": "各垂直行业关键词集群",
+      "drafts": "AI 生成长文稿",
+      "seo": "页面 SEO 与 JSON-LD 结构化数据",
+      "schedule": "定时发布队列",
+      "internalLinks": "与外联落地页内链互通"
+    }
+  },
+  "verticals": {
+    "tattoo": "纹身 / 穿孔",
+    "beauty": "美容 / 美甲 / 沙龙",
+    "restaurant": "餐饮 / 食品服务",
+    "medical": "医疗 / 诊所",
+    "industrial": "工业 / 制造",
+    "automotive": "汽车服务",
+    "agriculture": "农业 / 农场",
+    "janitorial": "清洁 / 保洁",
+    "cannabis": "大麻行业",
+    "veterinary": "兽医"
+  }
+}
