@@ -78,7 +78,15 @@ export default async function CampaignsPage({
                     {format.dateTime(c.createdAt, { dateStyle: "short", timeStyle: "short" })}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <RunButtons campaignId={c.id} />
+                    <div className="flex flex-col items-end gap-1">
+                      <Link
+                        href={`/campaigns/${c.id}/edit`}
+                        className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+                      >
+                        {t("edit")}
+                      </Link>
+                      <RunButtons campaignId={c.id} />
+                    </div>
                   </td>
                 </tr>
               ))}

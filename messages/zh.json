@@ -21,6 +21,8 @@
   "campaigns": {
     "title": "营销计划",
     "newTitle": "新建营销计划",
+    "editTitle": "编辑营销计划",
+    "edit": "编辑",
     "newButton": "+ 新建计划",
     "empty": "还没有营销计划，创建一个即可开始自动外联",
     "columns": {
@@ -70,8 +72,17 @@
       "senderName": "发件人姓名",
       "replyToEmail": "回复邮箱",
       "submit": "创建计划",
-      "saving": "创建中…",
-      "errorForbidden": "管理员权限已失效，请重新登录"
+      "update": "保存修改",
+      "saving": "保存中…",
+      "errorForbidden": "管理员权限已失效，请重新登录",
+      "icpSectionTitle": "理想客户画像 ICP（可选）",
+      "icpDescription": "ICP 描述 — 供 AI 评分使用",
+      "icpDescriptionPlaceholder": "例如：湾区独立医疗诊所，Google 评价 20-100 条。目标是 Practice Manager 和诊所所有者。排除大型医院集团和药房",
+      "icpCities": "目标城市（逗号分隔）",
+      "icpExcludeKeywords": "排除公司名关键词",
+      "icpMinReviews": "最少 Google 评价数",
+      "icpMinRating": "最低 Google 评分（0-5）",
+      "icpPreferredRoles": "目标角色（逗号分隔，覆盖默认）"
     }
   },
   "dashboard": {

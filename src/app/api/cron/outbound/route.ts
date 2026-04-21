@@ -25,6 +25,7 @@ export async function GET(request: Request) {
         senderName: campaign.senderName,
         replyToEmail: campaign.replyToEmail,
         campaignId: campaign.id,
+        icp: campaign.icp,
       });
       runs.push({ campaignId: campaign.id, sent: result.length });
     } catch (err) {

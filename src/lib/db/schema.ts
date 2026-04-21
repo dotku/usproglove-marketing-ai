@@ -89,6 +89,7 @@ export const campaigns = pgTable("campaigns", {
   status: campaignStatusEnum("status").default("draft").notNull(),
   dailyCap: integer("daily_cap").default(10).notNull(),
   contactsPerCompany: integer("contacts_per_company").default(3).notNull(),
+  icp: jsonb("icp").$type<Record<string, unknown>>(),
   promptTemplate: text("prompt_template").notNull(),
   senderEmail: text("sender_email").notNull(),
   senderName: text("sender_name").notNull(),

@@ -24,6 +24,7 @@ export default async function NewCampaignPage({
       </div>
 
       <CampaignForm
+        mode="create"
         defaults={{
           senderEmail: process.env.SENDER_EMAIL ?? "",
           senderName: process.env.SENDER_NAME ?? "",

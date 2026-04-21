@@ -17,6 +17,7 @@ import {
   findExistingEmails,
   type EventKind,
 } from "./persistence";
+import { parseIcp, matchesExcludes, type IcpConfig } from "./icp";
 
 const DraftSchema = z.object({
   subject: z.string().min(6).max(80),
@@ -57,6 +58,7 @@ export interface OutboundContext {
   replyToEmail: string;
   campaignId: string;
   mode?: OutboundMode;
+  icp?: IcpConfig | Record<string, unknown> | null;
   onEvent?: (event: ProgressEvent) => void;
 }
 
@@ -91,17 +93,56 @@ export async function runOutboundStep(ctx: OutboundContext) {
     data: { mode, dailyCap: ctx.dailyCap, vertical: ctx.vertical, campaignId: ctx.campaignId },
   });
 
+  const icp = parseIcp(ctx.icp ?? null);
+  const searchCities: (string | undefined)[] =
+    icp?.cities && icp.cities.length > 0 ? icp.cities : [ctx.city];
+  const perCityLimit = Math.min(20, Math.max(5, ctx.dailyCap * 3));
+  const rolesForThis = icp?.preferredRoles?.length ? icp.preferredRoles : rolesFor(ctx.vertical);
+
   await emit({
     kind: "run.search",
     persist: false,
-    data: { source: "google-places", vertical: ctx.vertical, limit: ctx.dailyCap * 3 },
+    data: {
+      source: "google-places",
+      vertical: ctx.vertical,
+      cities: searchCities.filter(Boolean),
+      perCityLimit,
+      hasIcp: !!icp,
+    },
   });
-  const discovered = await googlePlacesSource.discover({
-    vertical: ctx.vertical,
-    city: ctx.city,
-    region: ctx.region,
-    limit: ctx.dailyCap * 3,
-  });
+
+  const discoveredMap = new Map<string, Awaited<ReturnType<typeof googlePlacesSource.discover>>[number]>();
+  for (const city of searchCities) {
+    const batch = await googlePlacesSource.discover({
+      vertical: ctx.vertical,
+      city,
+      region: ctx.region,
+      limit: perCityLimit,
+    });
+    for (const c of batch) if (c.externalId) discoveredMap.set(c.externalId, c);
+  }
+  let discovered = Array.from(discoveredMap.values());
+
+  // ICP quality filters on Google Places results (before burning any enrichment credits).
+  if (icp) {
+    const beforeCount = discovered.length;
+    discovered = discovered.filter((c) => {
+      if (icp.minReviewCount != null && (c.reviewCount ?? 0) < icp.minReviewCount) return false;
+      if (icp.minRating != null) {
+        const r = c.rating != null ? c.rating / 10 : 0;
+        if (r < icp.minRating) return false;
+      }
+      return true;
+    });
+    const afterCount = discovered.length;
+    if (beforeCount !== afterCount) {
+      await emit({
+        kind: "run.search",
+        persist: false,
+        data: { phase: "icp-filter", before: beforeCount, after: afterCount },
+      });
+    }
+  }
 
   const contactsPerCompany = Math.max(1, Math.min(10, ctx.contactsPerCompany ?? 3));
   const minVerifyScore = Number(process.env.MIN_EMAIL_DELIVERABILITY_SCORE ?? 70);
@@ -140,6 +181,15 @@ export async function runOutboundStep(ctx: OutboundContext) {
       },
     });
 
+    const excludeHit = matchesExcludes(company.name, icp?.excludeKeywords);
+    if (excludeHit) {
+      await emit({
+        kind: "company.skipped",
+        data: { companyId, name: company.name, reason: "icp_exclude", keyword: excludeHit },
+      });
+      continue;
+    }
+
     if (!company.website) {
       await emit({
         kind: "company.skipped",
@@ -163,7 +213,7 @@ export async function runOutboundStep(ctx: OutboundContext) {
       enrichment = await findContacts({
         companyName: company.name,
         domain,
-        rolesOfInterest: rolesFor(ctx.vertical),
+        rolesOfInterest: rolesForThis,
       });
       domainEnrichmentCache.set(domain, enrichment);
     }
@@ -281,7 +331,7 @@ export async function runOutboundStep(ctx: OutboundContext) {
         task: "score",
         modelKey: "fast",
         schema: ScoreSchema,
-        prompt: scorePrompt(company.name, company.vertical, ctx.vertical, contact.role),
+        prompt: scorePrompt(company.name, company.vertical, ctx.vertical, contact.role, icp?.description),
         campaignId: ctx.campaignId,
         metadata: { companyName: company.name, domain, prospectId },
       });
@@ -452,13 +502,19 @@ function scorePrompt(
   companyVertical: string,
   targetVertical: Vertical,
   role?: string,
+  icpDescription?: string,
 ): string {
+  const icpBlock = icpDescription && icpDescription.trim()
+    ? `\nIdeal Customer Profile for this campaign:\n${icpDescription.trim()}\n\nCalibrate the score primarily against this ICP. Companies matching the ICP closely earn 80+; weak matches earn < 60.`
+    : "";
+
   return `Score this prospect for a disposable nitrile glove cold outreach. Return fit 0-100.
 
 Company: ${companyName}
 Vertical tag: ${companyVertical}
 Target vertical for campaign: ${targetVertical}
 Contact role: ${role ?? "unknown"}
+${icpBlock}
 
 Rubric:
 - 80-100: exact match vertical, owner/manager contact, clear glove usage

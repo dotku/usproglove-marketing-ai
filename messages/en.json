@@ -21,6 +21,8 @@
   "campaigns": {
     "title": "Campaigns",
     "newTitle": "New campaign",
+    "editTitle": "Edit campaign",
+    "edit": "Edit",
     "newButton": "+ New campaign",
     "empty": "No campaigns yet. Create one to start outbound.",
     "columns": {
@@ -70,8 +72,17 @@
       "senderName": "Sender name",
       "replyToEmail": "Reply-to email",
       "submit": "Create campaign",
-      "saving": "Creating…",
-      "errorForbidden": "You no longer have admin access. Refresh and sign in again."
+      "update": "Save changes",
+      "saving": "Saving…",
+      "errorForbidden": "You no longer have admin access. Refresh and sign in again.",
+      "icpSectionTitle": "Ideal Customer Profile (optional)",
+      "icpDescription": "ICP description — used by the AI scorer",
+      "icpDescriptionPlaceholder": "e.g. Independent medical clinics in the Bay Area with 20-100 reviews. Target practice managers and clinic owners. Exclude hospital systems and pharmacies.",
+      "icpCities": "Cities (comma-separated)",
+      "icpExcludeKeywords": "Exclude keywords in company name",
+      "icpMinReviews": "Min Google reviews",
+      "icpMinRating": "Min Google rating (0-5)",
+      "icpPreferredRoles": "Preferred roles (comma-separated, overrides defaults)"
     }
   },
   "dashboard": {

@@ -58,6 +58,7 @@ export async function POST(
     senderName: campaign.senderName,
     replyToEmail: campaign.replyToEmail,
     campaignId: campaign.id,
+    icp: campaign.icp,
     mode,
   };
 
