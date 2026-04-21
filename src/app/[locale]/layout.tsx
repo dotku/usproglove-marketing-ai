@@ -5,6 +5,7 @@ import { setRequestLocale, getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Auth0Provider } from "@auth0/nextjs-auth0";
 import { routing } from "@/i18n/routing";
 import "../globals.css";
 
@@ -43,7 +44,9 @@ export default async function LocaleLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
-        <NextIntlClientProvider messages={messages}>{children}</NextIntlClientProvider>
+        <Auth0Provider>
+          <NextIntlClientProvider messages={messages}>{children}</NextIntlClientProvider>
+        </Auth0Provider>
         <Analytics />
         <SpeedInsights />
       </body>

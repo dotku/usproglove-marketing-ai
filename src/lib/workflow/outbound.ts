@@ -1,11 +1,22 @@
-import { generateObject } from "ai";
 import { z } from "zod";
-import { models, pickModel } from "@/lib/ai/gateway";
+import { trackedGenerateObject, trackEmailSent } from "@/lib/ai/track";
 import { findContacts, verifyEmail } from "@/lib/prospects/enrichment";
 import { googlePlacesSource } from "@/lib/prospects/sources/google-places";
 import { sendEmail } from "@/lib/email/brevo";
 import type { Vertical } from "@/../content/catalog/products";
 import { products, heroSkuByVertical } from "@/../content/catalog/products";
+import {
+  upsertCompany,
+  upsertProspect,
+  updateProspectStatus,
+  mergeProspectMetadata,
+  logEvent,
+  insertOutboundMessage,
+  extractDomain,
+  rolesFor,
+  findExistingEmails,
+  type EventKind,
+} from "./persistence";
 
 const DraftSchema = z.object({
   subject: z.string().min(6).max(80),
@@ -19,32 +30,72 @@ const ScoreSchema = z.object({
   suggestedSkuId: z.string(),
 });
 
+export type OutboundMode = "discover" | "preview" | "send";
+
+export type ProgressEventKind =
+  | EventKind
+  | "run.started"
+  | "run.search"
+  | "run.done"
+  | "run.complete"
+  | "run.error";
+
+export interface ProgressEvent {
+  kind: ProgressEventKind;
+  prospectId?: string;
+  [key: string]: unknown;
+}
+
 export interface OutboundContext {
   vertical: Vertical;
   city?: string;
   region?: string;
   dailyCap: number;
+  contactsPerCompany?: number;
   senderEmail: string;
   senderName: string;
   replyToEmail: string;
   campaignId: string;
+  mode?: OutboundMode;
+  onEvent?: (event: ProgressEvent) => void;
 }
 
-/**
- * Outbound loop skeleton — wire into Vercel Workflow DevKit once the package is installed.
- * Each step below becomes a `step.do(...)` call so the workflow is crash-safe and resumable.
- *
- * Flow:
- *   1. research  → Google Places discovery by vertical+region
- *   2. enrich    → Hunter primary, Snov fallback, find owner/GM emails
- *   3. verify    → drop anything not deliverable
- *   4. score     → AI fit/risk score; drop < threshold
- *   5. draft     → AI personalized first-touch email keyed to vertical + hero SKU
- *   6. send      → Brevo transactional API
- *   7. wait      → workflow pauses until reply-poller resumes with inbound webhook
- *   8. branch    → positive → handoff; no-reply after 5d → follow-up; negative → suppress
- */
 export async function runOutboundStep(ctx: OutboundContext) {
+  const mode: OutboundMode = ctx.mode ?? "send";
+
+  async function emit(args: {
+    kind: ProgressEventKind;
+    prospectId?: string;
+    data?: Record<string, unknown>;
+    persist?: boolean;
+  }) {
+    const data = args.data ?? {};
+    if (args.persist !== false && isDbEventKind(args.kind)) {
+      await logEvent({
+        kind: args.kind,
+        prospectId: args.prospectId,
+        campaignId: ctx.campaignId,
+        payload: data,
+      });
+    }
+    try {
+      ctx.onEvent?.({ kind: args.kind, prospectId: args.prospectId, ...data });
+    } catch {
+      // stream consumer errors must not kill the pipeline
+    }
+  }
+
+  await emit({
+    kind: "run.started",
+    persist: false,
+    data: { mode, dailyCap: ctx.dailyCap, vertical: ctx.vertical, campaignId: ctx.campaignId },
+  });
+
+  await emit({
+    kind: "run.search",
+    persist: false,
+    data: { source: "google-places", vertical: ctx.vertical, limit: ctx.dailyCap * 3 },
+  });
   const discovered = await googlePlacesSource.discover({
     vertical: ctx.vertical,
     city: ctx.city,
@@ -52,82 +103,348 @@ export async function runOutboundStep(ctx: OutboundContext) {
     limit: ctx.dailyCap * 3,
   });
 
-  const results = [];
-  for (const company of discovered) {
-    if (!company.website) continue;
+  const contactsPerCompany = Math.max(1, Math.min(10, ctx.contactsPerCompany ?? 3));
+  const minVerifyScore = Number(process.env.MIN_EMAIL_DELIVERABILITY_SCORE ?? 70);
+  const minFit = Number(process.env.MIN_FIT_SCORE ?? 60);
+
+  type FindResult = Awaited<ReturnType<typeof findContacts>>;
+  const domainEnrichmentCache = new Map<string, FindResult>();
+
+  type ResultItem = {
+    prospectId: string;
+    companyId: string;
+    email: string;
+    status: "sent" | "skipped" | "failed" | "preview" | "discovered";
+    reason?: string;
+  };
+  const results: ResultItem[] = [];
+
+  const capReached = (): boolean => {
+    if (mode === "discover") return results.filter((r) => r.status === "discovered").length >= ctx.dailyCap;
+    if (mode === "preview") return results.filter((r) => r.status === "preview").length >= ctx.dailyCap;
+    return results.filter((r) => r.status === "sent" || r.status === "preview").length >= ctx.dailyCap;
+  };
+
+  companies: for (const company of discovered) {
+    if (capReached()) break;
+
+    const companyId = await upsertCompany(company, googlePlacesSource.id);
+    await emit({
+      kind: "company.discovered",
+      data: {
+        companyId,
+        name: company.name,
+        vertical: company.vertical,
+        city: company.city,
+        website: company.website,
+      },
+    });
+
+    if (!company.website) {
+      await emit({
+        kind: "company.skipped",
+        data: { companyId, name: company.name, reason: "no_website" },
+      });
+      continue;
+    }
+
     const domain = extractDomain(company.website);
-    if (!domain) continue;
+    if (!domain) {
+      await emit({
+        kind: "company.skipped",
+        data: { companyId, name: company.name, reason: "invalid_domain", website: company.website },
+      });
+      continue;
+    }
 
-    const contacts = await findContacts({
-      companyName: company.name,
-      domain,
-      rolesOfInterest: rolesFor(ctx.vertical),
-    });
-    if (contacts.length === 0) continue;
+    // Per-domain cache: 8 branches of the same chain share one enrichment lookup.
+    let enrichment = domainEnrichmentCache.get(domain);
+    if (!enrichment) {
+      enrichment = await findContacts({
+        companyName: company.name,
+        domain,
+        rolesOfInterest: rolesFor(ctx.vertical),
+      });
+      domainEnrichmentCache.set(domain, enrichment);
+    }
+    const { providerId: enrichmentSourceId, contacts } = enrichment;
 
-    const contact = contacts[0];
-    const verification = await verifyEmail(contact.email);
-    if (!verification.deliverable || verification.score < 70) continue;
+    if (contacts.length === 0) {
+      await emit({
+        kind: "company.skipped",
+        data: { companyId, name: company.name, reason: "no_contacts_found", domain },
+      });
+      continue;
+    }
 
-    const score = await generateObject({
-      model: models[pickModel("score")],
-      schema: ScoreSchema,
-      prompt: scorePrompt(company.name, company.vertical, ctx.vertical, contact.role),
-    });
-    if (score.object.fit < 60) continue;
+    // Filter duplicates + suppressions, take up to contactsPerCompany new candidates.
+    const existing = await findExistingEmails(contacts.map((c) => c.email));
+    const picked: typeof contacts = [];
+    for (const c of contacts) {
+      if (picked.length >= contactsPerCompany) break;
+      const key = c.email.toLowerCase();
+      if (existing.suppressed.has(key)) {
+        await emit({
+          kind: "contact.skipped",
+          data: { companyId, name: company.name, email: c.email, reason: "suppressed" },
+        });
+        continue;
+      }
+      const known = existing.prospects.get(key);
+      if (known) {
+        await emit({
+          kind: "contact.skipped",
+          data: {
+            companyId,
+            name: company.name,
+            email: c.email,
+            reason: "already_in_list",
+            existingProspectId: known.id,
+            existingStatus: known.status,
+          },
+        });
+        continue;
+      }
+      picked.push(c);
+    }
 
-    const heroSkuId = score.object.suggestedSkuId || heroSkuByVertical[ctx.vertical];
-    const heroSku = products.find((p) => p.id === heroSkuId) ?? products.find((p) => p.id === heroSkuByVertical[ctx.vertical])!;
+    if (picked.length === 0) {
+      await emit({
+        kind: "company.skipped",
+        data: {
+          companyId,
+          name: company.name,
+          reason: "all_contacts_known",
+          candidatesFound: contacts.length,
+        },
+      });
+      continue;
+    }
 
-    const draft = await generateObject({
-      model: models[pickModel("draft")],
-      schema: DraftSchema,
-      prompt: draftPrompt({
-        company: company.name,
-        vertical: ctx.vertical,
-        contactName: contact.firstName,
-        heroSkuName: heroSku.name,
-        positioning: heroSku.positioning,
-      }),
-    });
+    for (const contact of picked) {
+      if (capReached()) break companies;
 
-    const sent = await sendEmail({
-      to: { email: contact.email, name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || undefined },
-      from: { email: ctx.senderEmail, name: ctx.senderName },
-      replyTo: { email: ctx.replyToEmail },
-      subject: draft.object.subject,
-      textContent: draft.object.textBody,
-      htmlContent: draft.object.htmlBody,
-      tags: [`vertical:${ctx.vertical}`, `campaign:${ctx.campaignId}`],
-    });
+      const prospectId = await upsertProspect({ companyId, contact, enrichmentSourceId });
+      await emit({
+        kind: "prospect.enriched",
+        prospectId,
+        data: {
+          companyName: company.name,
+          email: contact.email,
+          role: contact.role,
+          confidence: contact.confidence,
+        },
+      });
 
-    results.push({ company, contact, sent });
-    if (results.length >= ctx.dailyCap) break;
+      const verification = await verifyEmail(contact.email);
+      await mergeProspectMetadata(prospectId, {
+        verification: {
+          deliverable: verification.deliverable,
+          score: verification.score,
+          verifierId: verification.verifierId,
+          threshold: minVerifyScore,
+        },
+      });
+
+      if (!verification.deliverable || verification.score < minVerifyScore) {
+        await updateProspectStatus(prospectId, "suppressed", {
+          suppressedAt: new Date(),
+          suppressionReason: "low_verification",
+        });
+        await emit({
+          kind: "prospect.verify_failed",
+          prospectId,
+          data: {
+            companyName: company.name,
+            email: contact.email,
+            score: verification.score,
+            threshold: minVerifyScore,
+          },
+        });
+        results.push({ prospectId, companyId, email: contact.email, status: "skipped", reason: "low_verification" });
+        continue;
+      }
+
+      await updateProspectStatus(prospectId, "enriched");
+      await emit({
+        kind: "prospect.verified",
+        prospectId,
+        data: { companyName: company.name, email: contact.email, score: verification.score },
+      });
+
+      if (mode === "discover") {
+        results.push({ prospectId, companyId, email: contact.email, status: "discovered" });
+        continue;
+      }
+
+      const score = await trackedGenerateObject({
+        task: "score",
+        modelKey: "fast",
+        schema: ScoreSchema,
+        prompt: scorePrompt(company.name, company.vertical, ctx.vertical, contact.role),
+        campaignId: ctx.campaignId,
+        metadata: { companyName: company.name, domain, prospectId },
+      });
+      await mergeProspectMetadata(prospectId, {
+        score: {
+          fit: score.object.fit,
+          reasoning: score.object.reasoning,
+          suggestedSkuId: score.object.suggestedSkuId,
+        },
+      });
+      await emit({
+        kind: "prospect.scored",
+        prospectId,
+        data: {
+          companyName: company.name,
+          email: contact.email,
+          fit: score.object.fit,
+          reasoning: score.object.reasoning,
+          suggestedSkuId: score.object.suggestedSkuId,
+        },
+      });
+
+      if (score.object.fit < minFit) {
+        await updateProspectStatus(prospectId, "discovered", { score: score.object.fit });
+        await emit({
+          kind: "prospect.skipped",
+          prospectId,
+          data: {
+            companyName: company.name,
+            email: contact.email,
+            reason: "low_fit",
+            fit: score.object.fit,
+            threshold: minFit,
+          },
+        });
+        results.push({ prospectId, companyId, email: contact.email, status: "skipped", reason: "low_fit" });
+        continue;
+      }
+
+      const heroSkuId = score.object.suggestedSkuId || heroSkuByVertical[ctx.vertical];
+      const heroSku =
+        products.find((p) => p.id === heroSkuId) ??
+        products.find((p) => p.id === heroSkuByVertical[ctx.vertical])!;
+
+      const draft = await trackedGenerateObject({
+        task: "draft",
+        modelKey: "primary",
+        schema: DraftSchema,
+        prompt: draftPrompt({
+          company: company.name,
+          vertical: ctx.vertical,
+          contactName: contact.firstName,
+          heroSkuName: heroSku.name,
+          positioning: heroSku.positioning,
+        }),
+        campaignId: ctx.campaignId,
+        metadata: { heroSkuId: heroSku.id, prospectId },
+      });
+
+      await updateProspectStatus(prospectId, "ready", { score: score.object.fit });
+      await emit({
+        kind: "message.drafted",
+        prospectId,
+        data: {
+          companyName: company.name,
+          email: contact.email,
+          subject: draft.object.subject,
+          heroSkuId: heroSku.id,
+        },
+      });
+
+      if (mode === "preview") {
+        await mergeProspectMetadata(prospectId, {
+          draft: {
+            subject: draft.object.subject,
+            textBody: draft.object.textBody,
+            htmlBody: draft.object.htmlBody,
+          },
+        });
+        results.push({ prospectId, companyId, email: contact.email, status: "preview" });
+        continue;
+      }
+
+      await updateProspectStatus(prospectId, "sending", { score: score.object.fit });
+
+      try {
+        const sent = await sendEmail({
+          to: {
+            email: contact.email,
+            name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || undefined,
+          },
+          from: { email: ctx.senderEmail, name: ctx.senderName },
+          replyTo: { email: ctx.replyToEmail },
+          subject: draft.object.subject,
+          textContent: draft.object.textBody,
+          htmlContent: draft.object.htmlBody,
+          tags: [`vertical:${ctx.vertical}`, `campaign:${ctx.campaignId}`],
+        });
+
+        await insertOutboundMessage({
+          prospectId,
+          campaignId: ctx.campaignId,
+          subject: draft.object.subject,
+          bodyText: draft.object.textBody,
+          bodyHtml: draft.object.htmlBody,
+          messageId: sent.messageId,
+          providerMessageId: sent.providerMessageId,
+        });
+        await updateProspectStatus(prospectId, "sent", { score: score.object.fit });
+        await emit({
+          kind: "message.sent",
+          prospectId,
+          data: { companyName: company.name, email: contact.email, messageId: sent.messageId },
+        });
+        await trackEmailSent({
+          campaignId: ctx.campaignId,
+          prospectId,
+          vertical: ctx.vertical,
+          messageId: sent.messageId,
+        });
+        results.push({ prospectId, companyId, email: contact.email, status: "sent" });
+      } catch (err) {
+        await updateProspectStatus(prospectId, "enriched", { score: score.object.fit });
+        await emit({
+          kind: "message.failed",
+          prospectId,
+          data: { companyName: company.name, email: contact.email, error: (err as Error).message },
+        });
+        results.push({ prospectId, companyId, email: contact.email, status: "failed", reason: (err as Error).message });
+      }
+    }
   }
+
+  const summary = {
+    sent: results.filter((r) => r.status === "sent").length,
+    preview: results.filter((r) => r.status === "preview").length,
+    discovered: results.filter((r) => r.status === "discovered").length,
+    skipped: results.filter((r) => r.status === "skipped").length,
+    failed: results.filter((r) => r.status === "failed").length,
+    total: results.length,
+  };
+
+  await emit({ kind: "run.done", persist: false, data: { mode, summary } });
 
   return results;
 }
 
-function extractDomain(url: string): string | null {
-  try {
-    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return u.hostname.replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
+const DB_EVENT_KINDS = new Set<ProgressEventKind>([
+  "company.discovered",
+  "company.skipped",
+  "contact.skipped",
+  "prospect.enriched",
+  "prospect.verified",
+  "prospect.verify_failed",
+  "prospect.scored",
+  "prospect.skipped",
+  "message.drafted",
+  "message.sent",
+  "message.failed",
+]);
 
-function rolesFor(vertical: Vertical): string[] {
-  switch (vertical) {
-    case "tattoo":
-      return ["owner", "artist"];
-    case "beauty":
-      return ["owner", "manager"];
-    case "restaurant":
-      return ["owner", "general manager", "procurement"];
-    default:
-      return ["owner", "manager", "procurement"];
-  }
+function isDbEventKind(kind: ProgressEventKind): kind is EventKind {
+  return DB_EVENT_KINDS.has(kind);
 }
 
 function scorePrompt(

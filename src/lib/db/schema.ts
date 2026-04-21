@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, text, varchar, integer, timestamp, jsonb, uuid, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, timestamp, jsonb, uuid, boolean, index, numeric } from "drizzle-orm/pg-core";
 
 export const verticalEnum = pgEnum("vertical", [
   "tattoo",
@@ -88,6 +88,7 @@ export const campaigns = pgTable("campaigns", {
   heroSkuId: varchar("hero_sku_id", { length: 32 }).notNull(),
   status: campaignStatusEnum("status").default("draft").notNull(),
   dailyCap: integer("daily_cap").default(10).notNull(),
+  contactsPerCompany: integer("contacts_per_company").default(3).notNull(),
   promptTemplate: text("prompt_template").notNull(),
   senderEmail: text("sender_email").notNull(),
   senderName: text("sender_name").notNull(),
@@ -162,3 +163,62 @@ export const suppressions = pgTable("suppressions", {
   reason: varchar("reason", { length: 64 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const aiTaskEnum = pgEnum("ai_task", ["score", "draft", "research", "extract"]);
+
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    task: aiTaskEnum("task").notNull(),
+    modelId: varchar("model_id", { length: 64 }).notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    cachedTokens: integer("cached_tokens").notNull().default(0),
+    costUsd: numeric("cost_usd", { precision: 10, scale: 6 }).notNull().default("0"),
+    durationMs: integer("duration_ms").notNull(),
+    campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    prospectId: uuid("prospect_id").references(() => prospects.id, { onDelete: "set null" }),
+    messageId: uuid("message_id").references(() => messages.id, { onDelete: "set null" }),
+    errored: boolean("errored").default(false).notNull(),
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    taskIdx: index("ai_usage_task_idx").on(t.task),
+    createdIdx: index("ai_usage_created_idx").on(t.createdAt),
+    campaignIdx: index("ai_usage_campaign_idx").on(t.campaignId),
+  }),
+);
+
+export const usageSnapshotKindEnum = pgEnum("usage_snapshot_kind", [
+  "db_total_size_bytes",
+  "table_row_count",
+  "table_size_bytes",
+  "brevo_daily_remaining",
+  "brevo_credits_remaining",
+  "hunter_searches_remaining",
+  "hunter_verifications_remaining",
+  "snov_credits_remaining",
+  "ai_daily_cost_usd",
+  "blob_size_bytes",
+]);
+
+export const usageSnapshots = pgTable(
+  "usage_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: usageSnapshotKindEnum("kind").notNull(),
+    scope: varchar("scope", { length: 128 }),
+    value: numeric("value", { precision: 20, scale: 6 }).notNull(),
+    unit: varchar("unit", { length: 16 }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    kindIdx: index("usage_snapshots_kind_idx").on(t.kind),
+    createdIdx: index("usage_snapshots_created_idx").on(t.createdAt),
+  }),
+);

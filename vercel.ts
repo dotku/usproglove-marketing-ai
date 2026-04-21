@@ -20,5 +20,9 @@ export const config = {
       path: "/api/cron/content-publish",
       schedule: "0 9 * * *",
     },
+    {
+      path: "/api/cron/usage-snapshot",
+      schedule: "0 0 * * *",
+    },
   ],
 } as const;

@@ -15,8 +15,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         </p>
       </section>
 
-      <nav className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <nav className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <AdminCard href="/dashboard" label={t("nav.dashboard")} />
+        <AdminCard href="/campaigns" label={t("nav.campaigns")} />
         <AdminCard href="/prospects" label={t("nav.prospects")} />
         <AdminCard href="/replies" label={t("nav.replies")} />
         <AdminCard href="/content" label={t("nav.content")} />

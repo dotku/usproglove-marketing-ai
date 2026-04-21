@@ -72,7 +72,7 @@ interface GooglePlace {
 
 function mapPlace(p: GooglePlace, vertical: Vertical): DiscoveredCompany {
   const findComponent = (type: string) =>
-    p.addressComponents?.find((c) => c.types.includes(type))?.shortText;
+    p.addressComponents?.find((c) => Array.isArray(c.types) && c.types.includes(type))?.shortText;
   return {
     externalId: p.id,
     name: p.displayName?.text ?? "Unknown",
